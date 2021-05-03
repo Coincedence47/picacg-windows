@@ -8,6 +8,7 @@ from PySide2.QtWidgets import QApplication, QVBoxLayout, QLabel
 from conf import config
 from src.index.book import BookMgr
 from src.qt.com.qtbubblelabel import QtBubbleLabel
+from src.qt.com.qtimg import QtImgMgr
 from src.qt.struct.qt_define import QtFileData
 from src.util import ToolUtil
 from src.util.tool import CTime
@@ -227,33 +228,40 @@ class QtImgTool(QtWidgets.QWidget, Ui_ReadImg):
                 self.stateWaifu.setStyleSheet("color:red;")
             else:
                 self.stateWaifu.setStyleSheet("color:dark;")
-            self.stateWaifu.setText("状态：" + waifuState)
+            if config.CanWaifu2x:
+                self.stateWaifu.setText("状态：" + waifuState)
         if waifuTick or isInit:
             self.tickLabel.setText("耗时：" + str(waifuTick) + "s")
 
     def CopyPicture(self):
-        clipboard = QApplication.clipboard()
         owner = self.readImg
+        p = owner.pictureData.get(owner.curIndex)
+        if not p or not p.data:
+            QtBubbleLabel.ShowErrorEx(owner, "下载未完成")
+            return
+        QtImgMgr().ShowImg(p.data)
+        # clipboard = QApplication.clipboard()
+        # owner = self.readImg
+        #
+        # if self.checkBox.isChecked():
+        #     p = owner.pictureData.get(owner.curIndex)
+        #     if not p or not p.waifuData:
+        #         QtBubbleLabel.ShowErrorEx(owner, "解码还未完成")
+        #         return
+        #     img = QImage()
+        #     img.loadFromData(p.waifuData)
+        #     clipboard.setImage(img)
+        #     QtBubbleLabel.ShowMsgEx(owner, "复制成功")
 
-        if self.checkBox.isChecked():
-            p = owner.pictureData.get(owner.curIndex)
-            if not p or not p.waifuData:
-                QtBubbleLabel.ShowErrorEx(owner, "解码还未完成")
-                return
-            img = QImage()
-            img.loadFromData(p.waifuData)
-            clipboard.setImage(img)
-            QtBubbleLabel.ShowMsgEx(owner, "复制成功")
-
-        else:
-            p = owner.pictureData.get(owner.curIndex)
-            if not p or not p.data:
-                QtBubbleLabel.ShowErrorEx(owner, "下载未完成")
-                return
-            img = QImage()
-            img.loadFromData(p.data)
-            clipboard.setImage(img)
-            QtBubbleLabel.ShowMsgEx(owner, "复制成功")
+        # else:
+        #     p = owner.pictureData.get(owner.curIndex)
+        #     if not p or not p.data:
+        #         QtBubbleLabel.ShowErrorEx(owner, "下载未完成")
+        #         return
+        #     img = QImage()
+        #     img.loadFromData(p.data)
+        #     clipboard.setImage(img)
+        #     QtBubbleLabel.ShowMsgEx(owner, "复制成功")
         return
 
     def OpenWaifu(self):

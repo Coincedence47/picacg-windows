@@ -1,41 +1,71 @@
-from PySide2 import QtWidgets, QtGui, QtCore
-from PySide2.QtCore import Qt, QRectF, QPointF, QSizeF, QEvent
-from PySide2.QtGui import QColor, QPainter, QPixmap, QImage
-from PySide2.QtWidgets import QFrame, QGraphicsPixmapItem, QGraphicsScene, QApplication
+import os
+import time
 
+from PySide2 import QtWidgets, QtGui, QtCore
+from PySide2.QtCore import Qt, QRectF, QPointF, QSizeF, QEvent, QTextCodec, QRegExp
+from PySide2.QtGui import QColor, QPainter, QPixmap, QImage, QValidator, QRegExpValidator, QDoubleValidator, \
+    QIntValidator
+from PySide2.QtWidgets import QFrame, QGraphicsPixmapItem, QGraphicsScene, QApplication, QFileDialog
+
+from conf import config
 from src.qt.com.qtbubblelabel import QtBubbleLabel
-from src.util import Singleton
+from src.qt.util.qttask import QtTask
+from src.util import Singleton, ToolUtil, Log
+from ui.img import Ui_Img
 
 
 class QtImgMgr(Singleton):
     def __init__(self):
         self.obj = QtImg()
+        self.data = None
+        self.waifu2xData = None
 
     def ShowImg(self, data):
-        p = None
-        if isinstance(data, bytes):
-            p = QPixmap()
-            p.loadFromData(data)
-        elif isinstance(data, (QPixmap, QImage)):
-            p = data
+        if data:
+            self.data = data
+            self.waifu2xData = None
+            QtTask().CancelConver("QtImg")
+            if config.CanWaifu2x:
+                self.obj.comboBox.setEnabled(True)
+                self.obj.changeButton.setEnabled(True)
+            self.obj.changeButton.setText("转换")
+            self.obj.ShowImg(data)
+        elif self.data:
+            if config.CanWaifu2x:
+                self.obj.comboBox.setEnabled(True)
+                self.obj.changeButton.setEnabled(True)
+            self.obj.changeButton.setText("转换")
+            self.obj.ShowImg(self.data)
         else:
-            return
-        self.obj.ShowImg(p)
+            if config.CanWaifu2x:
+                self.obj.comboBox.setEnabled(True)
+                self.obj.changeButton.setEnabled(True)
+            self.obj.changeButton.setText("转换")
+            self.obj.show()
 
 
-class QtImg(QtWidgets.QWidget):
+class QtImg(QtWidgets.QWidget, Ui_Img):
     def __init__(self):
         super(self.__class__, self).__init__()
+        Ui_Img.__init__(self)
+        self.setupUi(self)
         self.bookId = ""
         self.epsId = 0
         self.curIndex = 0
-        self.gridLayout = QtWidgets.QGridLayout(self)
         self.setWindowTitle("图片查看")
         self.setWindowModality(QtCore.Qt.ApplicationModal)
-        self.resize(402, 509)
+        self.resize(800, 900)
+        self.checkBox.setChecked(True)
+        self.index = 0
+        self.comboBox.setCurrentIndex(self.index)
+        validator = QIntValidator(0, 9999999)
+        self.heighEdit.setValidator(validator)
+        self.widthEdit.setValidator(validator)
+        exp = QDoubleValidator(0.1, 64, 1)
+        exp.setNotation(exp.StandardNotation)
+        self.scaleEdit.setValidator(exp)
         # self.setWindowFlags(Qt.FramelessWindowHint)
 
-        self.graphicsView = QtWidgets.QGraphicsView(self)
         self.graphicsView.setFrameStyle(QFrame.NoFrame)
         self.graphicsView.setObjectName("graphicsView")
 
@@ -67,17 +97,25 @@ class QtImg(QtWidgets.QWidget):
         # self.radioButton_2.installEventFilter(self)
         self.graphicsView.installEventFilter(self)
         self.graphicsView.setWindowFlag(Qt.FramelessWindowHint)
-        self.gridLayout.addWidget(self.graphicsView)
+        # tta有BUG，暂时屏蔽 TODO
+        self.ttaModel.setEnabled(False)
 
         self._delta = 0.1
         self.scaleCnt = 0
 
-    def ShowImg(self, pixMap):
+        self.backStatus = ""
+
+    def ShowImg(self, data):
         self.scaleCnt = 0
-        self.pixMap = QPixmap(pixMap)
+        self.pixMap = QPixmap()
+        self.pixMap.loadFromData(data)
         self.show()
         self.graphicsItem.setPixmap(self.pixMap)
         self.graphicsView.setSceneRect(QRectF(QPointF(0, 0), QPointF(self.pixMap.width(), self.pixMap.height())))
+        size = ToolUtil.GetDownloadSize(len(data))
+        self.sizeLabel.setText(size)
+        weight, height = ToolUtil.GetPictureSize(data)
+        self.resolutionLabel.setText(str(weight) + "x" + str(height))
         self.ScalePicture()
 
     def ScalePicture(self):
@@ -112,6 +150,11 @@ class QtImg(QtWidgets.QWidget):
             else:
                 self.graphicsView.scale(1/1.1, 1/1.1)
 
+    def keyReleaseEvent(self, ev):
+        if ev.key() == Qt.Key_Escape:
+            self.hide()
+            return
+        super(self.__class__, self).keyReleaseEvent(ev)
 
     def resizeEvent(self, event) -> None:
         super(self.__class__, self).resizeEvent(event)
@@ -157,3 +200,163 @@ class QtImg(QtWidgets.QWidget):
         clipboard.setPixmap(self.pixMap)
         QtBubbleLabel.ShowMsgEx(self, "复制成功")
         return
+
+    def ReduceScalePic(self):
+        self.zoom(1/1.1)
+        return
+
+    def AddScalePic(self):
+        self.zoom(1.1)
+        return
+
+    def OpenPicture(self):
+        try:
+            filename = QFileDialog.getOpenFileName(self, "Open Image", ".", "Image Files(*.jpg *.png)")
+            if filename and len(filename) >= 1:
+                name = filename[0]
+                if os.path.isfile(name):
+                    f = open(name, "rb")
+                    data = f.read()
+                    f.close()
+                    QtImgMgr().ShowImg(data)
+        except Exception as ex:
+            Log.Error(ex)
+        return
+
+    def StartWaifu2x(self):
+        if not QtImgMgr().data:
+            return
+        if not config.CanWaifu2x:
+            return
+        import waifu2x
+        self.comboBox.setEnabled(False)
+        self.changeButton.setEnabled(False)
+        self.SetStatus(False)
+        self.index = self.comboBox.currentIndex()
+        index = self.comboBox.currentIndex()
+        noise = int(self.noiseCombox.currentText())
+        if index == 0:
+            modelName = "CUNET"
+        elif index == 1:
+            modelName = "PHOTO"
+        elif index == 2:
+            modelName = "ANIME_STYLE_ART_RGB"
+        else:
+            return
+        if noise == -1:
+            noiseName = "NO_NOISE"
+        else:
+            noiseName = "NOISE"+str(noise)
+        if modelName == "CUNET" and self.scaleRadio.isChecked() and round(float(self.scaleEdit.text()), 1) <= 1:
+            modelInsence = "MODEL_{}_NO_SCALE_{}".format(modelName, noiseName)
+        else:
+            modelInsence = "MODEL_{}_{}".format(modelName, noiseName)
+        if self.ttaModel.isChecked():
+            modelInsence += "_TTA"
+
+        model = {
+            "model":  getattr(waifu2x, modelInsence),
+        }
+        if self.scaleRadio.isChecked():
+            model['scale'] = round(float(self.scaleEdit.text()), 1)
+        else:
+            model['width'] = int(self.widthEdit.text())
+            model['high'] = int(self.heighEdit.text())
+        self.backStatus = self.GetStatus()
+        QtTask().AddConvertTask("", QtImgMgr().data, model, self.AddConvertBack,
+                                cleanFlag="QtImg")
+        self.changeButton.setText("正在转换")
+        return
+
+    def AddConvertBack(self, data, waifuId, backParam, tick):
+        if data:
+            QtImgMgr().waifu2xData = data
+            if self.checkBox.isChecked():
+                self.ShowImg(data)
+            self.changeButton.setText("已转换")
+            self.tickLabel.setText(str(round(tick, 3)) + "s")
+            self.changeButton.setEnabled(False)
+        else:
+            self.changeButton.setEnabled(True)
+        self.SetStatus(True)
+        self.comboBox.setEnabled(True)
+        return
+
+    def SavePicture(self):
+        data = QtImgMgr().waifu2xData if QtImgMgr().waifu2xData else QtImgMgr().data
+        if not data:
+            return
+        try:
+            today = time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))
+            filepath = QFileDialog.getSaveFileName(self, "保存", "{}.jpg".format(today))
+            if filepath and len(filepath) >= 1:
+                name = filepath[0]
+                f = open(name, "wb")
+                f.write(data)
+                f.close()
+        except Exception as es:
+            Log.Error(es)
+        return
+
+    def SwithPicture(self):
+        if self.checkBox.isChecked() and QtImgMgr().waifu2xData:
+            self.ShowImg(QtImgMgr().waifu2xData)
+        else:
+            self.ShowImg(QtImgMgr().data)
+        return
+
+    def ChangeModel(self, index):
+        if self.comboBox.currentIndex() == self.index:
+            return
+        # self.index = self.comboBox.currentIndex()
+        self.changeButton.setText("转换")
+        self.changeButton.setEnabled(True)
+        return
+
+    def GetStatus(self):
+        data = str(self.noiseCombox.currentText()) + \
+            str(self.buttonGroup_2.checkedId()) + \
+            str(self.scaleEdit.text()) + \
+            str(self.heighEdit.text()) + \
+            str(int(self.ttaModel.isChecked())) + \
+            str(self.widthEdit.text()) + \
+            str(self.comboBox.currentIndex())
+        return data
+
+    def SetStatus(self, status):
+        self.scaleRadio.setEnabled(status)
+        self.heighRadio.setEnabled(status)
+        self.scaleEdit.setEnabled(status)
+        self.widthEdit.setEnabled(status)
+        self.heighEdit.setEnabled(status)
+        self.noiseCombox.setEnabled(status)
+        # self.radioButton_4.setEnabled(status)
+        # self.radioButton_5.setEnabled(status)
+        # self.radioButton_6.setEnabled(status)
+        # self.radioButton_7.setEnabled(status)
+        # self.radioButton_8.setEnabled(status)
+        # self.ttaModel.setEnabled(status)
+        self.CheckScaleRadio()
+
+    def SetEnable(self):
+        self.SetStatus(True)
+
+    def SetDisEnable(self):
+        self.SetStatus(False)
+
+    def CheckScaleRadio(self):
+        if self.scaleRadio.isChecked() and self.scaleRadio.isEnabled():
+            self.scaleEdit.setEnabled(True)
+            self.widthEdit.setEnabled(False)
+            self.heighEdit.setEnabled(False)
+        elif self.heighRadio.isChecked() and self.heighRadio.isEnabled():
+            self.scaleEdit.setEnabled(False)
+            self.widthEdit.setEnabled(True)
+            self.heighEdit.setEnabled(True)
+        data = self.GetStatus()
+        if self.backStatus != data:
+            self.changeButton.setEnabled(True)
+            self.changeButton.setText("转换")
+        else:
+            self.changeButton.setEnabled(False)
+            self.changeButton.setText("转换")

@@ -1,5 +1,4 @@
-import os
-import re
+
 
 from PySide2 import QtWidgets, QtGui  # 导入PySide2部件
 from PySide2.QtCore import QTimer, QUrl
@@ -9,7 +8,7 @@ from PySide2.QtWidgets import QMessageBox
 from conf import config
 from resources import resources
 from src.qt.chat.qtchat import QtChat
-from src.qt.com.qtimg import QtImg
+from src.qt.com.qtimg import  QtImgMgr
 from src.qt.main.qtindex import QtIndex
 from src.qt.menu.qtabout import QtAbout
 from src.qt.read.qtbookinfo import QtBookInfo
@@ -32,7 +31,6 @@ from src.qt.user.qtuser import QtUser
 from src.server import Server, req
 from src.util import Log
 from ui.main import Ui_MainWindow
-import waifu2x
 
 
 class BikaQtMainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -129,13 +127,33 @@ class BikaQtMainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.settingForm.ExitSaveSetting(self.size(), self.bookInfoForm.size(), self.qtReadImg.size(), userId, passwd)
 
     def Init(self):
-        stat = waifu2x.Init(config.Encode, config.Waifu2xThread)
-        if stat < 0:
-            self.msgForm.ShowError("waifu2x初始化错误")
+        if config.CanWaifu2x:
+            import waifu2x
+            stat = waifu2x.init()
+            if stat < 0:
+                self.msgForm.ShowError("waifu2x初始化错误")
+            else:
+                gpuInfo = waifu2x.getGpuInfo()
+                if gpuInfo:
+                    self.settingForm.SetGpuInfos(gpuInfo)
+                if gpuInfo and config.Encode < 0:
+                    config.Encode = 0
 
-        Log.Info("waifu2x初始化: " + str(stat) + " encode: " + str(config.Encode))
-        gpuInfo = waifu2x.GetGpuInfo()
-        self.settingForm.SetGpuInfos(gpuInfo)
+                waifu2x.initSet(config.Encode, config.Waifu2xThread)
+                Log.Info("waifu2x初始化: " + str(stat) + " encode: " + str(config.Encode) + " version:" + waifu2x.getVersion())
+                # self.msgForm.ShowMsg("waifu2x初始化成功\n" + waifu2x.getVersion())
+        else:
+            self.msgForm.ShowError("waifu2x无法启用, "+config.ErrorMsg)
+            self.settingForm.checkBox.setEnabled(False)
+            self.qtReadImg.frame.qtTool.checkBox.setEnabled(False)
+            self.downloadForm.autoConvert = False
+            self.downloadForm.radioButton.setEnabled(False)
+            QtImgMgr().obj.checkBox.setEnabled(False)
+            QtImgMgr().obj.changeButton.setEnabled(False)
+            QtImgMgr().obj.changeButton.setEnabled(False)
+            QtImgMgr().obj.comboBox.setEnabled(False)
+            QtImgMgr().obj.SetStatus(False)
+            config.IsOpenWaifu = 0
 
         self.InitUpdate()
         self.loginForm.Init()
@@ -145,8 +163,11 @@ class BikaQtMainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.settingForm.show()
         pass
 
-    def OpenAbout(self):
-        self.aboutForm.show()
+    def OpenAbout(self, action):
+        if action.text() == "about":
+            self.aboutForm.show()
+        elif action.text() == "img convert":
+            QtImgMgr().ShowImg("")
         pass
 
     def InitUpdate(self):
@@ -158,6 +179,9 @@ class BikaQtMainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                                                                                         data),
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
             if r == QMessageBox.Yes:
-                QDesktopServices.openUrl(QUrl("https://github.com/tonquer/picacg-windows/releases"))
+                QDesktopServices.openUrl(QUrl(config.UpdateUrl2))
         except Exception as es:
             Log.Error(es)
+
+    def Close(self):
+        self.downloadForm.Close()

@@ -5,6 +5,7 @@ from PySide2.QtGui import QCursor
 from PySide2.QtWidgets import QMenu, QApplication
 from PySide2.QtCore import Qt
 
+from src.index.book import BookMgr
 from src.qt.com.qtlistwidget import QtBookList, QtIntLimit
 from src.user.user import User
 from src.util.status import Status
@@ -15,31 +16,20 @@ class QtFavorite(QtWidgets.QWidget, Ui_favorite):
     def __init__(self, owner):
         super(self.__class__, self).__init__(owner)
         Ui_favorite.__init__(self)
+
         self.setupUi(self)
         self.owner = weakref.ref(owner)
 
         self.dealCount = 0
         self.dirty = False
 
-        self.bookList = QtBookList(self, self.__class__.__name__)
+        self.bookList = QtBookList(self, self.__class__.__name__, owner)
         self.bookList.InitBook(self.LoadNextPage)
         self.gridLayout_3.addWidget(self.bookList)
-        self.bookList.doubleClicked.connect(self.OpenBookInfo)
-        self.bookList.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.bookList.customContextMenuRequested.connect(self.SelectMenu)
-
-        self.popMenu = QMenu(self.bookList)
-        action = self.popMenu.addAction("打开")
-        action.triggered.connect(self.OpenBookInfoHandler)
-        action = self.popMenu.addAction("复制")
-        action.triggered.connect(self.CopyHandler)
-        action = self.popMenu.addAction("刪除")
-        action.triggered.connect(self.DelHandler)
-        action = self.popMenu.addAction("下载")
-        action.triggered.connect(self.DownloadHandler)
 
         self.lineEdit.setValidator(QtIntLimit(1, 1, self))
-        self.sortList = ["da", "dd"]
+        self.sortList = ["dd", "da"]
+        self.bookList.InstallDel()
 
     def SwitchCurrent(self):
         self.RefreshDataFocus()
@@ -75,42 +65,16 @@ class QtFavorite(QtWidgets.QWidget, Ui_favorite):
                 data += "{}E/{}P".format(str(info.epsCount), str(info.pagesCount))
                 self.bookList.AddBookItem(info.id, info.title, data, url, path, originalName)
 
-    def SelectMenu(self, pos):
-        index = self.bookList.indexAt(pos)
-        if index.isValid():
-            self.popMenu.exec_(QCursor.pos())
-        pass
-
-    def CopyHandler(self):
-        selected = self.bookList.selectedItems()
-        if not selected:
-            return
-
-        data = ''
-        for item in selected:
-            widget = self.bookList.itemWidget(item)
-            data += widget.GetTitle() + str("\r\n")
-        clipboard = QApplication.clipboard()
-        data = data.strip("\r\n")
-        clipboard.setText(data)
-        pass
-
-    def DelHandler(self):
-        bookIds = set()
-        selected = self.bookList.selectedItems()
-        for item in selected:
-            widget = self.bookList.itemWidget(item)
-            bookIds.add(widget.GetId())
-        if not bookIds:
-            return
-        self.DelAndFavorites(bookIds)
-
-    def DelAndFavorites(self, bookIds):
+    def DelCallBack(self, bookIds):
         self.owner().loadingForm.show()
 
         self.dealCount = len(bookIds)
         for bookId in bookIds:
             self.owner().qtTask.AddHttpTask(lambda x: User().AddAndDelFavorites(bookId, x), self.DelAndFavoritesBack)
+            info = BookMgr().books.get(bookId)
+            if info:
+                info.isFavourite = False
+
         pass
 
     def DelAndFavoritesBack(self, msg):
@@ -118,33 +82,6 @@ class QtFavorite(QtWidgets.QWidget, Ui_favorite):
         if self.dealCount <= 0:
             self.owner().loadingForm.close()
             self.RefreshDataFocus()
-
-    def DownloadHandler(self):
-        selected = self.bookList.selectedItems()
-        for item in selected:
-            widget = self.bookList.itemWidget(item)
-            self.owner().epsInfoForm.OpenEpsInfo(widget.GetId())
-        pass
-
-    def OpenBookInfoHandler(self):
-        selected = self.bookList.selectedItems()
-        for item in selected:
-            widget = self.bookList.itemWidget(item)
-            self.owner().bookInfoForm.OpenBook(widget.GetId())
-            return
-
-    def OpenBookInfo(self, modelIndex):
-        index = modelIndex.row()
-        item = self.bookList.item(index)
-        if not item:
-            return
-        widget = self.bookList.itemWidget(item)
-        if not widget:
-            return
-        bookId = widget.id
-        if not bookId:
-            return
-        self.owner().bookInfoForm.OpenBook(bookId)
 
     def LoadNextPage(self):
         self.LoadPage(self.bookList.page+1)

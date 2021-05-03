@@ -1,5 +1,4 @@
 import weakref
-import waifu2x
 from PySide2 import QtWidgets
 from PySide2.QtCore import Qt, QRectF, QPointF, QSizeF, QEvent, QSize, QMimeData
 from PySide2.QtGui import QPixmap, QPainter, QColor, QImage
@@ -92,6 +91,7 @@ class QtReadImg(QtWidgets.QWidget):
         info = BookMgr().books.get(bookId)
         if info:
             self.category = info.tags[:]
+            self.category.extend(info.categories)
         self.qtTool.checkBox.setChecked(config.IsOpenWaifu)
         self.qtTool.SetData(isInit=True)
         self.graphicsItem.setPixmap(QPixmap())
@@ -197,7 +197,8 @@ class QtReadImg(QtWidgets.QWidget):
             self.graphicsItem.setPixmap(QPixmap())
             self.qtTool.modelBox.setEnabled(False)
             return
-        self.qtTool.modelBox.setEnabled(True)
+        if config.CanWaifu2x:
+            self.qtTool.modelBox.setEnabled(True)
         assert isinstance(p, QtFileData)
         if not isShowWaifu:
             p2 = p.data
@@ -324,7 +325,7 @@ class QtReadImg(QtWidgets.QWidget):
             return
         assert isinstance(info, QtFileData)
         # path = self.owner().downloadForm.GetConvertFilePath(self.bookId, self.epsId, i)
-        QtTask().AddConvertTask(picInfo.path+info.model, info.data, info.model, self.Waifu2xBack, i, self.closeFlag)
+        QtTask().AddConvertTask(picInfo.path+str(info.model.get('model', 0)), info.data, info.model, self.Waifu2xBack, i, self.closeFlag)
         self.waitWaifuPicData.add(i)
 
     def AddDownloadTask(self, i, picInfo):

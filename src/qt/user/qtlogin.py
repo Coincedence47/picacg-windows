@@ -2,13 +2,14 @@ import weakref
 
 from PySide2.QtCore import Qt
 from PySide2.QtGui import QPixmap
+from PySide2.QtWidgets import QLabel
 
 from conf import config
 from src.qt.util.qttask import QtTask
 from src.server import Server, req
 from src.user.user import User
 from src.util.status import Status
-from ui.login import Ui_Login, QLabel
+from ui.login import Ui_Login
 from PySide2 import QtWidgets
 
 
@@ -61,9 +62,7 @@ class QtLogin(QtWidgets.QWidget, Ui_Login):
 
     def ShowUserImg(self, data, st):
         if st == Status.Ok:
-            a = QPixmap()
-            a.loadFromData(data)
-            self.owner().userForm.icon.setPixmap(a)
+            self.owner().userForm.SetPicture(data)
 
     def OpenRegister(self):
         self.SetSelectIp()

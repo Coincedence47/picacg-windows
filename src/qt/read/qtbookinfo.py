@@ -31,12 +31,13 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
         self.path = ""
         self.bookName = ""
         self.lastEpsId = -1
+        self.pictureData = None
 
         self.msgForm = QtBubbleLabel(self)
         self.picture.installEventFilter(self)
-        self.title.setGeometry(QRect(328, 240, 329, 27 * 4))
+        # self.title.setGeometry(QRect(328, 240, 329, 27 * 4))
         self.title.setWordWrap(True)
-        self.title.setAlignment(Qt.AlignTop)
+        # self.title.setAlignment(Qt.AlignLeft)
         self.title.setContextMenuPolicy(Qt.CustomContextMenu)
         self.title.customContextMenuRequested.connect(self.CopyTitle)
 
@@ -84,11 +85,11 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
 
         self.epsLayout.addWidget(self.epsListWidget)
 
-        self.listWidget = QtBookList(self, self.__class__.__name__)
+        self.listWidget = QtBookList(self, self.__class__.__name__, owner)
         self.listWidget.InitUser(self.LoadNextPage)
         self.listWidget.doubleClicked.connect(self.OpenCommentInfo)
 
-        self.childrenListWidget = QtBookList(None, self.__class__.__name__)
+        self.childrenListWidget = QtBookList(None, self.__class__.__name__, owner)
         self.childrenListWidget.InitUser(self.LoadChildrenNextPage)
 
         self.childrenWidget = QtWidgets.QWidget()
@@ -163,6 +164,7 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
     def OpenBook(self, bookId):
         self.bookId = bookId
         self.setWindowTitle(self.bookId)
+        self.setFocus()
         # if self.bookId in self.owner().downloadForm.downloadDict:
         #     self.download.setEnabled(False)
         # else:
@@ -230,6 +232,7 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
 
     def UpdatePicture(self, data, status):
         if status == Status.Ok:
+            self.pictureData = data
             pic = QtGui.QPixmap()
             pic.loadFromData(data)
             pic.scaled(self.picture.size(), QtCore.Qt.KeepAspectRatio)
@@ -265,8 +268,10 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
                         commentsCount = info.get("commentsCount")
                         commnetId = info.get('_id')
                         likesCount = info.get("likesCount")
+                        title = info.get("_user", {}).get("title", "")
+                        level = info.get("_user", {}).get("level", 1)
                         self.listWidget.AddUserItem(commnetId, commentsCount, likesCount, content, name, createdTime, floor, avatar.get("fileServer"),
-                                                    avatar.get("path"), avatar.get("originalName"))
+                                                    avatar.get("path"), avatar.get("originalName"), title, level)
 
                 for index, info in enumerate(comments.get("docs")):
                     floor = total - ((page - 1) * limit + index)
@@ -277,8 +282,10 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
                     commentsCount = info.get("commentsCount")
                     commnetId = info.get('_id')
                     likesCount = info.get("likesCount")
+                    title = info.get("_user", {}).get("title", "")
+                    level = info.get("_user", {}).get("level", 1)
                     self.listWidget.AddUserItem(commnetId, commentsCount, likesCount, content, name, createdTime, floor, avatar.get("fileServer"),
-                                 avatar.get("path"), avatar.get("originalName"))
+                                 avatar.get("path"), avatar.get("originalName"), title, level)
             return
         except Exception as es:
             Log.Error(es)
@@ -300,13 +307,15 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
         downloadIds = self.owner().downloadForm.GetDownloadCompleteEpsId(self.bookId)
         for index, epsInfo in enumerate(info.eps):
             label = QLabel(epsInfo.title)
+            # label.setWordWrap(True)
             label.setContentsMargins(20, 10, 20, 10)
             item = QListWidgetItem(self.epsListWidget)
             if index in downloadIds:
                 item.setBackground(QColor(18, 161, 130))
             else:
                 item.setBackground(QColor(0,0,0,0))
-            item.setSizeHint(label.sizeHint())
+            item.setSizeHint(label.sizeHint() + QSize(2, 0))
+            item.setToolTip(epsInfo.title)
             self.epsListWidget.setItemWidget(item, label)
         self.tabWidget.setTabText(0, "章节({})".format(str(len(info.eps))))
         return
@@ -477,9 +486,11 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
                     commentsCount = info.get("commentsCount")
                     likesCount = info.get("likesCount")
                     commnetId = info.get('_id')
+                    title = info.get("_user", {}).get("title", "")
+                    level = info.get("_user", {}).get("level", 1)
                     self.childrenListWidget.AddUserItem(commnetId, commentsCount, likesCount, content, name, createdTime, floor,
                                                 avatar.get("fileServer"),
-                                                avatar.get("path"), avatar.get("originalName"))
+                                                avatar.get("path"), avatar.get("originalName"), title, level)
 
                 pass
             self.listWidget.scrollToItem(item, self.listWidget.ScrollHint.PositionAtTop)
@@ -556,8 +567,8 @@ class QtBookInfo(QtWidgets.QWidget, Ui_BookInfo):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress:
             if event.button() == Qt.LeftButton:
-                if obj.pixmap() and not obj.text():
-                    QtImgMgr().ShowImg(obj.pixmap())
+                if self.pictureData:
+                    QtImgMgr().ShowImg(self.pictureData)
                 return True
             else:
                 return False

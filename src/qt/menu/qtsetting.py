@@ -37,6 +37,11 @@ class QtSetting(QtWidgets.QWidget, Ui_Setting):
             config.HttpProxy = httpProxy
             self.httpEdit.setText(config.HttpProxy)
 
+        ChatProxy = self.settings.value("ChatProxy")
+        if ChatProxy is not None:
+            config.ChatProxy = int(ChatProxy)
+            self.checkBox_2.setChecked(bool(config.ChatProxy))
+
         config.SavePath = self.settings.value("SavePath") or config.SavePath
         self.saveEdit.setText(config.SavePath)
 
@@ -68,6 +73,12 @@ class QtSetting(QtWidgets.QWidget, Ui_Setting):
         if v:
             config.DownloadModel = int(v)
         self.downloadModel.setCurrentIndex(config.DownloadModel)
+
+        v = self.settings.value("Waifu2x/LogIndex")
+        if v:
+            config.LogIndex = int(v)
+        self.logBox.setCurrentIndex(config.LogIndex)
+        Log.UpdateLoggingLevel()
         # v = self.settings.value("Waifu2x/Scale")
         # if v:
         #     config.Scale = int(v)
@@ -103,6 +114,7 @@ class QtSetting(QtWidgets.QWidget, Ui_Setting):
         config.ImageQuality = self.buttonGroup.checkedButton().objectName().replace("quality_", "")
         httpProxy = self.httpEdit.text()
         config.SavePath = self.saveEdit.text()
+        config.ChatProxy = 1 if self.checkBox_2.isChecked() else 0
 
         self.settings.setValue("DownloadThreadNum", config.DownloadThreadNum)
         self.settings.setValue("ImageQuality", config.ImageQuality)
@@ -110,12 +122,15 @@ class QtSetting(QtWidgets.QWidget, Ui_Setting):
         self.settings.setValue("Proxy/Http", config.HttpProxy)
 
         self.settings.setValue("SavePath", config.SavePath)
+        self.settings.setValue("ChatProxy", config.ChatProxy)
 
         config.Encode = self.encodeSelect.currentIndex()
         config.Waifu2xThread = int(self.threadSelect.currentIndex()) + 1
         config.IsOpenWaifu = self.checkBox.isChecked()
         config.LookModel = int(self.lookModel.currentIndex())
         config.DownloadModel = int(self.downloadModel.currentIndex())
+        config.LogIndex = int(self.logBox.currentIndex())
+
         self.settings.setValue("Waifu2x/Encode", config.Encode)
         # self.settings.setValue("Waifu2x/Thread", config.Waifu2xThread)
         # self.settings.setValue("Waifu2x/Scale", config.Scale)
@@ -123,7 +138,8 @@ class QtSetting(QtWidgets.QWidget, Ui_Setting):
         self.settings.setValue("Waifu2x/Open", config.IsOpenWaifu)
         self.settings.setValue("Waifu2x/LookModel", config.LookModel)
         self.settings.setValue("Waifu2x/DownloadModel", config.DownloadModel)
-
+        self.settings.setValue("Waifu2x/LogIndex", config.LogIndex)
+        Log.UpdateLoggingLevel()
         # QtWidgets.QMessageBox.information(self, '保存成功', "成功", QtWidgets.QMessageBox.Yes)
         QtBubbleLabel.ShowMsgEx(self, "保存成功")
 
@@ -147,6 +163,6 @@ class QtSetting(QtWidgets.QWidget, Ui_Setting):
 
     def GetGpuName(self):
         index = config.Encode
-        if index >= len(self.gpuInfos):
+        if index >= len(self.gpuInfos) or index < 0:
             return "GPU"
         return self.gpuInfos[index]

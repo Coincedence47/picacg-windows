@@ -165,11 +165,11 @@ class ToolUtil(object):
 
     @staticmethod
     def GetDateStr(createdTime):
-        timeArray = time.strptime(createdTime, "%Y-%m-%dT%H:%M:%S.%fZ")
-        tick = int(time.mktime(timeArray))
+        timeArray = time.strptime(createdTime, "%Y-%m-%dT%H:%M:%S.%f%z")
+        tick = int(time.mktime(timeArray)-time.timezone)
         now = int(time.time())
         day = int((int(now - time.timezone) / 86400) - (int(tick - time.timezone) / 86400))
-        return timeArray, day
+        return time.localtime(tick), day
 
     @staticmethod
     def GetDownloadSize(downloadLen):
@@ -207,17 +207,19 @@ class ToolUtil(object):
         # 条漫不放大
 
         if max(w, h) >= 2561:
-            return "noscale"
-        return ToolUtil.GetLookModel(category)
+            return ToolUtil.GetModelByIndex(0)
+        return ToolUtil.GetModelByIndex(ToolUtil.GetLookModel(category))
 
     @staticmethod
     def GetDownloadScaleModel(w, h):
         dot = w * h
         # 条漫不放大
-
+        if not config.CanWaifu2x:
+            return {}
+        import waifu2x
         if max(w, h) >= 2561:
-            return "noscale"
-        return ToolUtil.GetDownloadModel()
+            return {"model": waifu2x.MODEL_ANIME_STYLE_ART_RGB_NOISE3, "scale": 1, "index": 0}
+        return ToolUtil.GetModelByIndex(config.DownloadModel)
 
     @staticmethod
     def GetPictureFormat(data):
@@ -229,31 +231,37 @@ class ToolUtil(object):
 
     @staticmethod
     def GetPictureSize(data):
-        picFormat = ToolUtil.GetPictureFormat(data)
-        weight, height = 1, 1
-        if picFormat == "png":
-            # head = 8 + 4 + 4
-            data2 = data[16:24]
-            weight = int.from_bytes(data2[:4], byteorder='big', signed=False)
-            height = int.from_bytes(data2[5:], byteorder='big', signed=False)
-        elif picFormat == "jpg":
-            size = min(1000, len(data))
-
-            index = 0
-            while index < size:
-                if data[index] == 255:
-                    index += 1
-                    if 192 <= data[index] <= 206:
-                        index += 4
-                        if index + 4 >= size:
-                            continue
-                        height = int.from_bytes(data[index:index + 2], byteorder='big', signed=False)
-                        weight = int.from_bytes(data[index + 2:index + 4], byteorder='big', signed=False)
-                        break
-                    else:
-                        continue
-                index += 1
-        return weight, height
+        from PIL import Image
+        from io import BytesIO
+        a = BytesIO(data)
+        img = Image.open(a)
+        a.close()
+        return img.width, img.height
+        # picFormat = ToolUtil.GetPictureFormat(data)
+        # weight, height = 1, 1
+        # if picFormat == "png":
+        #     # head = 8 + 4 + 4
+        #     data2 = data[16:24]
+        #     weight = int.from_bytes(data2[:4], byteorder='big', signed=False)
+        #     height = int.from_bytes(data2[5:], byteorder='big', signed=False)
+        # elif picFormat == "jpg":
+        #     size = min(1000, len(data))
+        #
+        #     index = 0
+        #     while index < size:
+        #         if data[index] == 255:
+        #             index += 1
+        #             if 192 <= data[index] <= 206:
+        #                 index += 4
+        #                 if index + 4 >= size:
+        #                     continue
+        #                 height = int.from_bytes(data[index:index + 2], byteorder='big', signed=False)
+        #                 weight = int.from_bytes(data[index + 2:index + 4], byteorder='big', signed=False)
+        #                 break
+        #             else:
+        #                 continue
+        #         index += 1
+        # return weight, height
 
     @staticmethod
     def GetDataModel(data):
@@ -285,10 +293,10 @@ class ToolUtil(object):
     def GetLookModel(category):
         if config.LookModel == 0:
             if "Cosplay" in category or "cosplay" in category or "CosPlay" in category or "COSPLAY" in category:
-                return config.Model2
-            return config.Model3
+                return 2
+            return 3
         else:
-            return getattr(config, "Model"+str(config.LookModel), config.Model3)
+            return config.LookModel
 
     @staticmethod
     def GetDownloadModel():
@@ -297,34 +305,34 @@ class ToolUtil(object):
         return getattr(config, "Model"+str(config.DownloadModel), config.Model1)
 
     @staticmethod
-    def GetScaleAndNoiseByModel(model):
-        if model == "noscale":
-            return "cunet", 1, 3
-        return model, 2, 3
-
-    @staticmethod
     def GetModelAndScale(model):
-        if model == "noscale":
+        if not model:
+            return 0, 1, 1
+        model = model.get('index', 0)
+        if model == 0:
             return 0, 3, 1
-        elif model == "cunet":
+        elif model == 1:
             return 1, 3, 2
-        elif model == "photo":
+        elif model == 2:
             return 2, 3, 2
-        elif model == "anime_style_art_rgb":
+        elif model == 3:
             return 3, 3, 2
         return 0, 1, 1
 
     @staticmethod
     def GetModelByIndex(index):
+        if not config.CanWaifu2x:
+            return {}
+        import waifu2x
         if index == 0:
-            return "noscale"
+            return {"model": waifu2x.MODEL_CUNET_NO_SCALE_NOISE3, "scale": 1, "index": index}
         elif index == 1:
-            return "cunet"
+            return {"model": waifu2x.MODEL_CUNET_NOISE3, "scale": 2, "index": index}
         elif index == 2:
-            return "photo"
+            return {"model": waifu2x.MODEL_PHOTO_NOISE3, "scale": 2, "index": index}
         elif index == 3:
-            return "anime_style_art_rgb"
-        return "cunet"
+            return {"model": waifu2x.MODEL_ANIME_STYLE_ART_RGB_NOISE3, "scale": 2, "index": index}
+        return {"model": waifu2x.MODEL_CUNET_NOISE3, "scale": 2, "index": index}
 
     @staticmethod
     def GetCanSaveName(name):

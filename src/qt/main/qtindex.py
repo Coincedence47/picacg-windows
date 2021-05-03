@@ -3,9 +3,11 @@ import weakref
 
 from PySide2 import QtWidgets
 from PySide2.QtCore import Qt
+from PySide2.QtGui import QPixmap, QIcon
 
+from resources.resources import DataMgr
 from src.qt.com.qtlistwidget import QtBookList
-from src.server import Server, req, Status, Log
+from src.server import Server, req,  Log
 from src.user.user import User
 from ui.index import Ui_Index
 
@@ -19,29 +21,45 @@ class QtIndex(QtWidgets.QWidget, Ui_Index):
         self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.owner = weakref.ref(owner)
         self.isInit = False
-        self.bookList1 = QtBookList(self, "1")
+        self.bookList1 = QtBookList(self, "1", owner)
         self.bookList1.InitBook()
         self.horizontalLayout.addWidget(self.bookList1)
         self.bookList1.doubleClicked.connect(self.OpenSearch1)
-        self.bookList2 = QtBookList(self, "2")
+        self.bookList2 = QtBookList(self, "2", owner)
         self.bookList2.InitBook()
         self.bookList2.doubleClicked.connect(self.OpenSearch2)
         self.horizontalLayout_2.addWidget(self.bookList2)
 
-        self.bookList3 = QtBookList(self, "3")
+        self.bookList3 = QtBookList(self, "3", owner)
         self.bookList3.InitBook()
         self.bookList3.doubleClicked.connect(self.OpenSearch3)
         self.horizontalLayout_3.addWidget(self.bookList3)
+        p = QPixmap()
+        p.loadFromData(DataMgr().GetData("fold2"))
+        q = QPixmap()
+        q.loadFromData(DataMgr().GetData("fold1"))
+        self.toolButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toolButton.setIcon(QIcon(p))
+        self.bookList1.setVisible(False)
+        self.toolButton_2.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toolButton_2.setIcon(QIcon(p))
+        self.bookList2.setVisible(False)
+        self.toolButton_3.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toolButton_3.setIcon(QIcon(q))
+        self.bookList3.setVisible(True)
+
+        self.toolButton.clicked.connect(self.SwitchButton1)
+        self.toolButton_2.clicked.connect(self.SwitchButton2)
+        self.toolButton_3.clicked.connect(self.SwitchButton3)
 
     def SwitchCurrent(self):
-        if User().token and not self.isInit:
+        if User().token:
             self.Init()
-            self.InitRandom()
+            if not self.bookList3.count():
+                self.InitRandom()
         pass
 
     def Init(self):
-        if self.isInit:
-            return
         self.isInit = True
         self.owner().loadingForm.show()
         self.owner().qtTask.AddHttpTask(lambda x: Server().Send(req.GetCollectionsReq(), bakParam=x), self.InitBack)
@@ -53,6 +71,8 @@ class QtIndex(QtWidgets.QWidget, Ui_Index):
     def InitBack(self, data):
         try:
             self.owner().loadingForm.close()
+            self.bookList1.clear()
+            self.bookList2.clear()
             data = json.loads(data)
             for categroys in data.get("data").get("collections"):
                 if categroys.get("title") == "本子神推薦":
@@ -130,4 +150,38 @@ class QtIndex(QtWidgets.QWidget, Ui_Index):
         if not bookId:
             return
         self.owner().bookInfoForm.OpenBook(bookId)
+        return
+
+    def SwitchButton1(self):
+        isVisible = self.bookList1.isVisible()
+        self.bookList1.setVisible(not isVisible)
+        p = QPixmap()
+        if isVisible:
+            p.loadFromData(DataMgr().GetData("fold2"))
+        else:
+            p.loadFromData(DataMgr().GetData("fold1"))
+        self.toolButton.setIcon(QIcon(p))
+        return
+
+    def SwitchButton2(self):
+        isVisible = self.bookList2.isVisible()
+        self.bookList2.setVisible(not isVisible)
+        p = QPixmap()
+        if isVisible:
+            p.loadFromData(DataMgr().GetData("fold2"))
+        else:
+            p.loadFromData(DataMgr().GetData("fold1"))
+        self.toolButton_2.setIcon(QIcon(p))
+
+        return
+
+    def SwitchButton3(self):
+        isVisible = self.bookList3.isVisible()
+        self.bookList3.setVisible(not isVisible)
+        p = QPixmap()
+        if isVisible:
+            p.loadFromData(DataMgr().GetData("fold2"))
+        else:
+            p.loadFromData(DataMgr().GetData("fold1"))
+        self.toolButton_3.setIcon(QIcon(p))
         return

@@ -94,6 +94,9 @@ class QtDownload(QtWidgets.QWidget, Ui_download):
             self.tableWidget.insertRow(rowCont)
             self.UpdateTableItem(task)
 
+    def Close(self):
+        self.timer.stop()
+
     def GetDownloadEpsId(self, bookId):
         if bookId not in self.downloadDict:
             return []
@@ -289,7 +292,7 @@ class QtDownload(QtWidgets.QWidget, Ui_download):
                 else:
                     if task.convertStatus in [DownloadInfo.Converting]:
                         menu.addAction(self.pauseConvertAction)
-                    elif task.convertStatus in [DownloadInfo.Pause]:
+                    elif task.convertStatus in [DownloadInfo.Pause, DownloadInfo.Error, DownloadInfo.NotFound]:
                         menu.addAction(self.startConvertAction)
             else:
                 menu = QMenu(self.tableWidget)
